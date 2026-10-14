@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle de Estoque</title>
+<style>
+:root{--bg:#f4f5f2;--card:#fff;--tx:#1d2521;--mut:#667068;--bd:#dfe3dc;--ac:#1f5f4a;--ac-t:#fff;--soft:#e4efe9;--bad:#a8321f;--bad-s:#f8e3df;--warn:#8a5a00;--warn-s:#f7ecd0}
+@media(prefers-color-scheme:dark){:root{--bg:#141815;--card:#1d231f;--tx:#e6ebe6;--mut:#94a09a;--bd:#2d3630;--ac:#5fc4a0;--ac-t:#0d1a14;--soft:#223229;--bad:#f09a8a;--bad-s:#3a1f1a;--warn:#e8c26a;--warn-s:#3a2f14}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);
+color:var(--tx);font:15px/1.5 "Segoe UI",system-ui,sans-serif}
+header,main{max-width:1040px;margin:0 auto;padding:0 20px}
+header{padding-top:24px}
+h1{font-size:22px;margin:0 0 14px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:16px;margin:0 0 12px}
+nav{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--bd)}
+nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 14px;font:inherit;color:var(--mut);cursor:pointer;white-space:nowrap}
+nav button[aria-selected=true]{color:var(--tx);border-bottom-color:var(--ac);font-weight:600}
+main{padding-top:20px;padding-bottom:48px}
+section[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:16px;margin-bottom:16px}
+form{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mut);flex:1 1 150px}
+input,select{font:inherit;padding:8px 10px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx)}
+button.pri{font:inherit;font-weight:600;padding:9px 16px;border:0;border-radius:6px;background:var(--ac);color:var(--ac-t);cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{font-weight:600;color:var(--mut);font-size:13px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:600;background:var(--soft);color:var(--ac)}
+.tag.min{background:var(--bad-s);color:var(--bad)}
+.tag.max{background:var(--warn-s);color:var(--warn)}
+.vazio{color:var(--mut);margin:4px 0}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:10px 18px;border-radius:6px;background:var(--ac);color:var(--ac-t);font-weight:600;display:none;max-width:90vw}
+#toast.erro{background:var(--bad);color:#fff}
+</style>
+</head>
+<body>
+<header>
+  <h1>Controle de Estoque</h1>
+  <nav role="tablist" id="abas">
+    <button role="tab" data-aba="produtos" aria-selected="true">Produtos</button>
+    <button role="tab" data-aba="entrada">Registrar entrada</button>
+    <button role="tab" data-aba="categorias">Valor por categoria</button>
+    <button role="tab" data-aba="saidas">Saídas</button>
+    <button role="tab" data-aba="limites">Limites do estoque</button>
+    <button role="tab" data-aba="relatorio">Relatório por período</button>
+  </nav>
+</header>
+
+<main>
+  <section id="produtos">
+    <div class="card">
+      <h2>Cadastrar produto</h2>
+      <form id="f-produto">
+        <label>Nome<input name="nome" required></label>
+        <label>Categoria<input name="categoria" required></label>
+        <label>Quantidade<input name="quantidade" type="number" min="0" step="1" required></label>
+        <label>Valor da unidade (R$)<input name="valor_unidade" type="number" min="0.01" step="0.01" required></label>
+        <button class="pri">Cadastrar produto</button>
+      </form>
+    </div>
+    <div class="card"><h2>Produtos em estoque</h2><div class="tw" id="t-produtos"></div></div>
+  </section>
+
+  <section id="entrada" hidden>
+    <div class="card">
+      <h2>Registrar entrada no estoque</h2>
+      <form id="f-entrada">
+        <label>Produto<select name="id_produto" id="sel-produto" required></select></label>
+        <label>Quantidade recebida<input name="quantidade" type="number" min="1" step="1" required></label>
+        <button class="pri">Registrar entrada</button>
+      </form>
+    </div>
+  </section>
+
+  <section id="categorias" hidden>
+    <div class="card"><h2>Valor total por categoria</h2><div class="tw" id="t-categorias"></div></div>
+  </section>
+
+  <section id="saidas" hidden>
+    <div class="card"><h2>Saídas de produtos (mais recentes primeiro)</h2><div class="tw" id="t-saidas"></div></div>
+  </section>
+
+  <section id="limites" hidden>
+    <div class="card">
+      <h2>Produtos nos limites mínimo (0) e máximo (100)</h2>
+      <div class="tw" id="t-limites"></div>
+    </div>
+  </section>
+
+  <section id="relatorio" hidden>
+    <div class="card">
+      <form id="f-periodo">
+        <label>Data inicial<input type="date" name="data_inicial" required></label>
+        <label>Data final<input type="date" name="data_final" required></label>
+        <button class="pri">Gerar relatório</button>
+      </form>
+    </div>
+    <div class="card"><h2>Movimentações no período</h2><div class="tw" id="t-relatorio"><p class="vazio">Escolha as datas e gere o relatório.</p></div></div>
+    <div class="card"><h2>Produtos com maior saída</h2><div class="tw" id="t-maiores"><p class="vazio">Escolha as datas e gere o relatório.</p></div></div>
+  </section>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+const API = 'http://localhost:3000'; // endereço do seu back-end
+
+const $ = s => document.querySelector(s);
+const brl = v => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const dataHora = v => new Date(v).toLocaleString('pt-BR');
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(caminho, corpo) {
+  const opcoes = corpo && { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) };
+  let r;
+  try { r = await fetch(API + caminho, opcoes); }
+  catch { throw new Error('Não consegui falar com o servidor. Ele está rodando em ' + API + '?'); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.erro || 'Erro ' + r.status);
+  return d;
+}
+
+let tt;
+function aviso(msg, erro) {
+  const t = $('#toast');
+  t.textContent = msg; t.className = erro ? 'erro' : ''; t.style.display = 'block';
+  clearTimeout(tt); tt = setTimeout(() => t.style.display = 'none', 3500);
+}
+
+// cols: [campo, título, formatador?, numérico?]
+function tabela(el, cols, linhas) {
+  if (!linhas.length) { el.innerHTML = '<p class="vazio">Nenhum registro encontrado.</p>'; return; }
+  el.innerHTML = '<table><thead><tr>' +
+    cols.map(c => `<th class="${c[3] ? 'n' : ''}">${c[1]}</th>`).join('') + '</tr></thead><tbody>' +
+    linhas.map(l => '<tr>' + cols.map(c => {
+      const v = c[2] ? c[2](l[c[0]], l) : esc(l[c[0]]);
+      return `<td class="${c[3] ? 'n' : ''}">${v}</td>`;
+    }).join('') + '</tr>').join('') + '</tbody></table>';
+}
+
+const status = q => q <= 0 ? '<span class="tag min">Mínimo</span>' : q >= 100 ? '<span class="tag max">Máximo</span>' : '<span class="tag">Normal</span>';
+
+const carregar = {
+  async produtos() {
+    const d = await api('/produtos');
+    tabela($('#t-produtos'), [
+      ['nome', 'Produto'], ['categoria', 'Categoria'],
+      ['quantidade', 'Quantidade', null, 1],
+      ['valor_unidade', 'Valor unitário', v => brl(v), 1],
+      ['valor_unidade', 'Valor em estoque', (v, l) => brl(v * l.quantidade), 1],
+      ['quantidade', 'Situação', v => status(v)]
+    ], d);
+    $('#sel-produto').innerHTML = d.map(p => `<option value="${p.id}">${esc(p.nome)} (${p.quantidade} un.)</option>`).join('');
+  },
+  entrada: () => carregar.produtos(),
+  async categorias() {
+    tabela($('#t-categorias'), [
+      ['categoria', 'Categoria'], ['quantidade_total', 'Unidades', null, 1],
+      ['valor_total', 'Valor total', v => brl(v), 1]
+    ], await api('/categorias/valor-total'));
+  },
+  async saidas() {
+    tabela($('#t-saidas'), [
+      ['nome', 'Produto'], ['quantidade', 'Quantidade', null, 1], ['dt', 'Data e hora', v => dataHora(v)]
+    ], await api('/movimentacoes/saidas'));
+  },
+  async limites() {
+    tabela($('#t-limites'), [
+      ['nome', 'Produto'], ['categoria', 'Categoria'], ['quantidade', 'Quantidade', null, 1],
+      ['status_limite', 'Limite atingido', v => `<span class="tag ${v === 'Mínimo' ? 'min' : 'max'}">${v}</span>`],
+      ['percentual', 'Nível', v => v + '%', 1]
+    ], await api('/produtos/limites'));
+  },
+  relatorio() {}
+};
+
+// abas
+document.querySelectorAll('#abas button').forEach(b => b.onclick = async () => {
+  document.querySelectorAll('#abas button').forEach(x => x.setAttribute('aria-selected', x === b));
+  document.querySelectorAll('main section').forEach(s => s.hidden = s.id !== b.dataset.aba);
+  try { await carregar[b.dataset.aba](); } catch (e) { aviso(e.message, true); }
+});
+
+const dados = f => Object.fromEntries(new FormData(f));
+
+$('#f-produto').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const d = dados(e.target);
+    const r = await api('/produtos', { ...d, quantidade: Number(d.quantidade), valor_unidade: Number(d.valor_unidade) });
+    aviso(r.mensagem); e.target.reset(); carregar.produtos();
+  } catch (er) { aviso(er.message, true); }
+};
+
+$('#f-entrada').onsubmit = async e => {
+  e.preventDefault();
+  try {
+    const d = dados(e.target);
+    const r = await api('/movimentacoes/entrada', { id_produto: Number(d.id_produto), quantidade: Number(d.quantidade) });
+    aviso(r.mensagem); e.target.reset(); carregar.produtos();
+  } catch (er) { aviso(er.message, true); }
+};
+
+$('#f-periodo').onsubmit = async e => {
+  e.preventDefault();
+  const q = '?' + new URLSearchParams(dados(e.target));
+  try {
+    const [rel, top] = await Promise.all([api('/movimentacoes/relatorio' + q), api('/movimentacoes/maiores-saidas' + q)]);
+    tabela($('#t-relatorio'), [
+      ['nome_produto', 'Produto'], ['unidade_medida', 'Unidade'],
+      ['total_entradas', 'Entradas', null, 1], ['total_saidas', 'Saídas', null, 1],
+      ['saldo_periodo', 'Saldo', null, 1],
+      ['valor_entradas', 'Valor das entradas', v => brl(v), 1],
+      ['valor_saidas', 'Valor das saídas', v => brl(v), 1]
+    ], rel);
+    tabela($('#t-maiores'), [
+      ['nome_produto', 'Produto'], ['quantidade_total_saida', 'Quantidade de saída', null, 1],
+      ['valor_total_saida', 'Valor das saídas', v => brl(v), 1]
+    ], top);
+  } catch (er) { aviso(er.message, true); }
+};
+
+// datas padrão: do dia 1 do mês até hoje
+const hoje = new Date(), iso = d => d.toISOString().slice(0, 10);
+$('#f-periodo [name=data_inicial]').value = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+$('#f-periodo [name=data_final]').value = iso(hoje);
+
+carregar.produtos().catch(e => aviso(e.message, true));
+</script>
+</body>
+</html>
